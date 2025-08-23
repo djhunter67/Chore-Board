@@ -4,21 +4,5 @@
 {% endblock %}
 
 {% block individual_page_contents %}
-<section class="login">
-  <div class="login__container" >
-    <h2>Log in</h2>
-    <form hx-ext="response-targets">
-      <input type="text" name="email" value="test_3@email.com" required>
-      <input type="password" name="password" value="123456" placeholder="Password" required>
-      <button
-	type="submit"
-	hx-post="/login"
-	hx-push-url="/"
-	hx-target="#template_pages"
-	hx-target-error="#error_block"
-	>Log in</button>
-    </form>
-    <p>Don't have an account? <a href="/registration">Register</a></p>
-  </div>
-</section>
+<h1>HELLO From the Chore Tracker</h1>
 {% call super() %} {% endblock %}

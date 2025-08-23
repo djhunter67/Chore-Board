@@ -3,13 +3,33 @@ use std::path::PathBuf;
 use actix_files::NamedFile;
 use actix_web::{get, HttpResponse, Responder};
 use askama::Template;
+use serde::{Deserialize, Serialize};
 use tracing::{error, info, instrument};
 
+#[derive(Serialize, Deserialize, Debug)]
+pub struct Chores {
+    pub name: String,
+    pub assigned_to: String,
+    pub due_date: String,
+    pub status: String,
+}
+
+impl Chores {
+    pub fn new(name: String, assigned_to: String, due_date: String, status: String) -> Self {
+        Self {
+            name,
+            assigned_to,
+            due_date,
+            status,
+        }
+    }
+}
 
 #[derive(Template)]
 #[template(path = "index.html")]
-pub struct Index<'a> {
-    pub title: &'a str,
+pub struct Index {
+    pub title: String,
+    pub chores: Vec<Chores>,
 }
 
 #[derive(Template)]
@@ -94,12 +114,9 @@ async fn response_targets() -> Result<NamedFile, actix_web::Error> {
     }
 }
 
-
 #[get("/health_check")]
 #[instrument(name = "Health check", level = "info")]
 pub async fn health_check() -> impl Responder {
     info!("Health check endpoint called.");
     HttpResponse::Ok().json("I'm alive!")
 }
-
-

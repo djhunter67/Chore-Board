@@ -116,33 +116,40 @@ fn authenticate_user(user: &User, password: &str) -> Result<User, ErrorCode> {
 
 /// Endpoint to change a user's password.
 /// Returns 200 OK if the password is successfully changed, otherwise returns an appropriate error code.
+#[put("/user/{email}/change_password")]
 #[instrument(
     name = "change_password",
     level = "info",
     target = "chore_tracker",
     skip(user, old_password, new_password)
 )]
-fn change_password(
-    conn: Connection,
-    user: Json<&User>,
-    old_password: &str,
-    new_password: &str,
-) -> Result<(), ErrorCode> {
-    if old_password.is_empty() || new_password.is_empty() {
-        return Err(ErrorCode::InternalMalfunction); // Example error code
-    } else if old_password == new_password {
-        return Err(ErrorCode::InternalMalfunction); // Example error code
-    } else if new_password.len() < 6 {
-        return Err(ErrorCode::InternalMalfunction); // Example error code
+pub async fn change_password(
+    conn: Data<Connection>,
+    user: Json<User>,
+    old_password: Json<String>,
+    new_password: Json<String>,
+) -> impl Responder {
+    if old_password.0.is_empty() || new_password.0.is_empty() {
+        return HttpResponse::BadRequest().finish();
+    } else if old_password.0 == new_password.0 {
+        return HttpResponse::ExpectationFailed().finish();
+    } else if new_password.0.len() < 6 {
+        HttpResponse::Forbidden().finish();
     }
 
     // Logic to change the password
-    let user = authenticate_user(&user, old_password)?;
+    let user = authenticate_user(&user, &old_password.0).expect("User not authenticated");
 
     // Update the user's password in the database
+    conn.execute(
+        "UPDATE users SET password = ? WHERE email = ?",
+        rusqlite::params![new_password.0, user.email],
+    )
+    .expect("Failed to update password");
 
     info!("Password for user {} changed successfully", user.email);
-    Ok(())
+
+    HttpResponse::Ok().finish()
 }
 
 /// Endpoint to verify a user's email address.
@@ -155,7 +162,7 @@ fn change_password(
     skip(user)
 )]
 pub async fn reset_password(user: Json<User>) -> impl Responder {
-    if let Err(_) = send_verification_email(user) {
+    if send_verification_email(user).is_err() {
         return HttpResponse::InternalServerError().finish();
     }
 
@@ -207,7 +214,7 @@ fn verify_email(user: &User) -> Result<(), ErrorCode> {
 /// Returns 200 OK if the email is successfully sent, otherwise returns an appropriate error code.
 fn send_verification_email(user: Json<User>) -> Result<(), ErrorCode> {
     // verify the passed in email
-    if let Err(_) = verify_email(&user) {
+    if verify_email(&user).is_err() {
         return Err(ErrorCode::PermissionDenied); // Example error code
     }
 

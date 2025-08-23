@@ -4,30 +4,24 @@
 {% endblock %}
 
 {% block individual_page_contents %}
-<section id="card_container">
-  <div id="card_container__adrian" class="education_card">
-    <h2>ADRIAN</h2>    
-    <a
-      id="card_container__english__button"
-      hx-get="/child/adrian"
-      hx-push-url="true"
-      hx-swap="outerHTML"
-      hx-target="#template_pages"
-      >
-      <img src="/english_image" alt="English image"/>
-    </a>
-  </div>
-  <div id="card_container__corbin" class="education_card">
-    <h2>CORBIN</h2>
-    <a
-      id="card_container__science__button"
-      hx-get="/child/corbin"
-      hx-push-url="true"
-      hx-swap="outerHTML"
-      hx-target="#template_pages">
-      <img src="/science_image" alt="Science image"/>
-    </a>      
-  </div>
+<section id="chore_board">
+  <h1>CHORE BOARD</h1>
+  <table>
+    <tr>
+      <th>Chore</th>
+      <th>Assigned To</th>
+      <th>Due Date</th>
+      <th>Status</th>
+    </tr>
+    {% for chore in chores %}
+    <tr>
+      <td>{{ chore.name }}</td>
+      <td>{{ chore.assigned_to }}</td>
+      <td>{{ chore.due_date }}</td>
+      <td>{{ chore.status }}</td>      
+    </tr>
+    {% endfor %}
+  </table>  
 </section>
 
 {% call super() %} {% endblock %}
