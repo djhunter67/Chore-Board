@@ -3,25 +3,28 @@ use std::path::PathBuf;
 use actix_files::NamedFile;
 use actix_web::{get, HttpResponse, Responder};
 use askama::Template;
+use serde::{Deserialize, Serialize};
 use tracing::{error, info, instrument};
 
+use super::index::{ChoreAssignee, ChoresList};
+
+#[derive(Serialize, Deserialize)]
+pub struct Chores {
+    pub name: ChoresList,
+    pub assigned_to: ChoreAssignee,
+}
+
+impl Chores {
+    pub fn new(name: ChoresList, assigned_to: ChoreAssignee) -> Self {
+        Self { name, assigned_to }
+    }
+}
 
 #[derive(Template)]
 #[template(path = "index.html")]
-pub struct Index<'a> {
-    pub title: &'a str,
-}
-
-#[derive(Template)]
-#[template(path = "login.html")]
-pub struct LoginPage<'a> {
-    pub title: &'a str,
-}
-
-#[derive(Template)]
-#[template(path = "register.html")]
-pub struct RegisterPage<'a> {
-    pub title: &'a str,
+pub struct Index {
+    pub title: String,
+    pub chores: Vec<Chores>,
 }
 
 #[derive(Template)]
@@ -41,26 +44,6 @@ pub struct EmailPage {
     pub domain: String,
     pub expiration_time: String,
     pub exact_time: String,
-}
-
-
-#[derive(Template)]
-#[template(path = "doctor.html")]
-pub struct DoctorData<'a> {
-    pub title: &'a str,
-    pub age: &'a str,
-    pub name: &'a str,
-    pub email: &'a str,
-    pub phone: &'a str,
-    pub address: &'a str,
-    pub speciality: &'a str,
-}
-
-#[derive(Template)]
-#[template(path = "dentist.html")]
-pub struct Dental<'a> {
-    pub title: &'a str,
-    pub name: &'a str,
 }
 
 #[derive(Template)]
@@ -126,3 +109,9 @@ async fn response_targets() -> Result<NamedFile, actix_web::Error> {
     }
 }
 
+#[get("/health_check")]
+#[instrument(name = "Health check", level = "info")]
+pub async fn health_check() -> impl Responder {
+    info!("Health check endpoint called.");
+    HttpResponse::Ok().json("I'm alive!")
+}

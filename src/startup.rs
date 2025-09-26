@@ -14,9 +14,11 @@ use tracing::instrument;
 use tracing::{debug, error, info, warn};
 
 use crate::endpoints;
+use crate::endpoints::templates::{
+    favicon, health_check, htmx, response_targets, source_map, stylesheet,
+};
 use crate::endpoints::user::{create_user, delete_user, get_user, update_user};
 use crate::settings::Settings;
-use crate::templates::{favicon, health_check, htmx, response_targets, source_map, stylesheet};
 
 #[instrument(
     name = "main runner",

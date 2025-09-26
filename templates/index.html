@@ -5,23 +5,40 @@
 
 {% block individual_page_contents %}
 <section id="chore_board">
-  <h1>CHORE BOARD</h1>
-  <table>
-    <tr>
-      <th>Chore</th>
-      <th>Assigned To</th>
-      <th>Due Date</th>
-      <th>Status</th>
-    </tr>
-    {% for chore in chores %}
-    <tr>
-      <td>{{ chore.name }}</td>
-      <td>{{ chore.assigned_to }}</td>
-      <td>{{ chore.due_date }}</td>
-      <td>{{ chore.status }}</td>      
-    </tr>
-    {% endfor %}
-  </table>  
+  
+  <div id="chore_board__column1"></div>
+  <div id="chore_board__column1_5"></div>
+  <div id="chore_board__column2"></div>
+  <div id="chore_board__column2_5"></div>
+  <div id="chore_board__column3"></div>
+  <div id="chore_board__column3_5"></div>
+  <div id="chore_board__column4"></div>
+  <div id="chore_board__column4_5"></div>
+  <div id="chore_board__column5"></div>
+  <div id="chore_board__column5_5"></div>
+  <div id="chore_board__column6"></div>
+  <div id="chore_board__column6_5"></div>
+  <div id="chore_board__column7"></div>
+  <div id="chore_board__column7_5"></div>
+  <div id="chore_board__column8"></div>
+  <div id="chore_board__column8_5"></div>
+  <aside id="chore_board__container">
+    <h1>CHORE BOARD</h1>
+    <table id="chore_board__container__table">
+      <colgroup>
+	<col style="width: 60%;">
+	<col style="width: 20%;">
+	<col style="width: 20%;">
+	<col style="width: 30%;">
+      </colgroup>
+      {% for chore in chores %}
+      <tr>
+	<td><p class="chore_name">{{ chore.name }}:</p></td>
+	<td><p class="chore_assigned">{{ chore.assigned_to }}</p></td>
+      </tr>
+      {% endfor %}
+    </table>
+  </aside>
 </section>
 
 {% call super() %} {% endblock %}
