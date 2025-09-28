@@ -1,4 +1,5 @@
 use std::{
+    collections::HashMap,
     convert::Infallible,
     env,
     future::{ready, Ready},
@@ -18,7 +19,7 @@ pub struct Settings {
     pub secret: Secret,
     pub email: Email,
     pub frontend_url: String,
-    pub doctor: Doctor,
+    pub sqlite: Sqlite,
 }
 
 impl FromRequest for Settings {
@@ -87,6 +88,13 @@ pub struct Mongo {
     pub db: String,
     pub collection: String,
     pub require_auth: bool,
+}
+
+/// Sqlite setting for the entire application
+#[derive(Deserialize, Clone, Debug)]
+pub struct Sqlite {
+    pub db_path: String,
+    pub pragma: HashMap<String, String>,
 }
 
 /// Application's specific settings to expose `port`,
@@ -194,4 +202,41 @@ pub fn get() -> Result<Settings, config::ConfigError> {
         .build()?;
 
     settings.try_deserialize::<Settings>()
+}
+
+#[cfg(test)]
+mod test {
+    use super::*;
+
+    #[test]
+    fn test_get_settings() {
+        let settings = get().expect("Failed to get settings");
+        assert!(settings.debug);
+    }
+
+    #[test]
+    fn test_environment_try_from() {
+        let dev_env = Environment::try_from("development".to_string()).unwrap();
+        assert_eq!(dev_env.as_str(), "development");
+
+        let prod_env = Environment::try_from("production".to_string()).unwrap();
+        assert_eq!(prod_env.as_str(), "production");
+
+        let invalid_env = Environment::try_from("staging".to_string());
+        assert!(invalid_env.is_err());
+    }
+
+    // assert that the redis settings are correctly deserialized
+    #[test]
+    fn test_redis_settings() {
+        let settings = get().expect("Failed to get settings");
+
+        let redis_settings = settings.redis;
+
+        assert!(!redis_settings.url.is_empty());
+        assert!(redis_settings.pool_max_open > 0);
+        assert!(redis_settings.pool_max_idle > 0);
+        assert!(redis_settings.pool_timeout_seconds > 0);
+        assert!(redis_settings.pool_expire_seconds > 0);
+    }
 }
