@@ -18,6 +18,10 @@ impl Chores {
     pub fn new(name: ChoresList, assigned_to: ChoreAssignee) -> Self {
         Self { name, assigned_to }
     }
+
+    pub fn to_display(self) -> String {
+        format!("{} - {}", self.name, self.assigned_to)
+    }
 }
 
 #[derive(Template)]
