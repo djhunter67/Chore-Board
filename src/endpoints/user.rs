@@ -189,7 +189,7 @@ fn verify_email(user: &User) -> Result<(), ErrorCode> {
         return Err(ErrorCode::NotFound); // Example error code
     }
 
-    if !letters.iter().any(|&c| c == '@') {
+    if !letters.contains(&'@') {
         return Err(ErrorCode::NotFound); // Example error code
     }
 

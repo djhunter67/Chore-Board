@@ -31,14 +31,21 @@
 	<col style="width: 20%;">
 	<col style="width: 30%;">
       </colgroup>
-      {% for chore in chores %}
-      <tr>
-	<td><p class="chore_name">{{ chore.name }}:</p></td>
-	<td><p class="chore_assigned">{{ chore.assigned_to }}</p></td>
+      {% for (chore, assignee) in chores.iter().zip(assignees) %}
+      <tr id="chore_table">
+	<td><p class="chore_name">{{ chore }}:</p></td>
+	<td><p class="chore_assigned">{{ assignee }}</p></td>
       </tr>
       {% endfor %}
     </table>
   </aside>
+  <button
+    id="chore_board__rotate"
+    hx-post="/rotate_choree"
+    hx-target="#chore_board__container__table"
+    hx-swap="outerHTML">
+    ROTATE CHOREE
+  </button>
 </section>
 
 {% call super() %} {% endblock %}

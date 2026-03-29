@@ -10,6 +10,7 @@ use actix_web::{
     web::{scope, Data},
     App, HttpServer,
 };
+use deadpool_redis::Pool;
 use tracing::instrument;
 use tracing::{debug, error, info, warn};
 
@@ -40,7 +41,7 @@ fn run(
 
     // Redis connection pool
     let cfg = deadpool_redis::Config::from_url(settings.clone().redis.url);
-    let redis_pool = match cfg.create_pool(Some(deadpool_redis::Runtime::Tokio1)) {
+    let redis_pool: Pool = match cfg.create_pool(Some(deadpool_redis::Runtime::Tokio1)) {
         Ok(pool) => pool,
         Err(err) => {
             error!("Failed to connect to Redis: {err}\nExiting...");
@@ -97,6 +98,7 @@ fn run(
             .service(response_targets);
         service
             .service(endpoints::index::index)
+            .service(endpoints::rotate::rotate)
             .service(
                 scope("/v1")
                     .service(create_user)

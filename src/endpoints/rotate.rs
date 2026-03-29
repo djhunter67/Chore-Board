@@ -1,102 +1,18 @@
-use actix_web::{get, web::Data, HttpResponse};
+use actix_web::{post, web::Data, HttpResponse};
 use askama::Template;
 use deadpool_redis::{self, redis::AsyncCommands};
-use serde::{Deserialize, Serialize};
-use std::fmt::Display;
 use tracing::{debug, error, info, instrument, warn};
 
-use crate::endpoints::templates::{Chores, Index};
+use crate::endpoints::{
+    index::{rotate_assigned_to, ChoreAssignee, ChoresList},
+    templates::{Chores, RotateAssignee},
+};
 
-#[derive(Serialize, Deserialize, Clone)]
-pub enum ChoreAssignee {
-    Aleyet,
-    Ajathyij,
-    Abeyi,
-    Achyi,
-    Acobayi,
-    Anwan,
-    Alual,
-    Aluel,
-    Aping,
-    Akol,
-    Kaman,
-    DeAnna,
-    Christerpher,
-}
+#[post("/rotate_choree")]
+#[instrument(name = "Rotate", level = "info", skip(conn))]
+pub async fn rotate(conn: Data<deadpool_redis::Pool>) -> HttpResponse {
+    info!("Rotating the assignees");
 
-impl Display for ChoreAssignee {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        let assignee = match self {
-            ChoreAssignee::Aleyet => "Sudania",
-            ChoreAssignee::Ajathyij => "Sonara",
-            ChoreAssignee::Abeyi => "Sahara",
-            ChoreAssignee::Achyi => "Samira",
-            ChoreAssignee::Acobayi => "Safara",
-            ChoreAssignee::Anwan => "Semian",
-            ChoreAssignee::Alual => "Somara",
-            ChoreAssignee::Aluel => "Samaia",
-            ChoreAssignee::Aping => "Simidale",
-            ChoreAssignee::Akol => "Sakeem",
-            ChoreAssignee::Kaman => "Baba",
-            ChoreAssignee::DeAnna => "Yuma",
-            ChoreAssignee::Christerpher => "Sayfon",
-        };
-        write!(f, "{assignee}")
-    }
-}
-
-#[derive(Serialize, Deserialize, Clone)]
-pub enum ChoresList {
-    KitchenAndGroceries,
-    BreakfastAndBathroom,
-    VacuumAndDiningTable,
-    LunchAndGrassCutting,
-    SinkCleanAndAnimalCare,
-    DinnerAndBottleCleaning,
-    ShoeCleanUp,
-    TrashPickup,
-    ClothesPickup,
-    ToyCleanUp,
-    TrashRemovalAndWaterAndMail,
-    Dishes,
-    VehicleRepair,
-}
-
-impl Display for ChoresList {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        let chore = match self {
-            Self::KitchenAndGroceries => "Kitchen & Grocery put away",
-            Self::BreakfastAndBathroom => "Breakfast & Bathroom",
-            Self::VacuumAndDiningTable => "Vacuum & Dining Table",
-            Self::LunchAndGrassCutting => "Lunch & Grass Cutting",
-            Self::SinkCleanAndAnimalCare => "Sink & Animal Care",
-            Self::DinnerAndBottleCleaning => "Dinner & Bottle Cleaning",
-            Self::ShoeCleanUp => "Shoe Clean Up",
-            Self::TrashPickup => "Trash Pickup",
-            Self::ClothesPickup => "Clothes Pickup",
-            Self::ToyCleanUp => "Toy Clean Up",
-            Self::TrashRemovalAndWaterAndMail => "Trash Removal, Water, & Mail",
-            Self::Dishes => "Dishes",
-            Self::VehicleRepair => "Vehicle Repair",
-        };
-        write!(f, "{chore}")
-    }
-}
-
-/// Display the tasks and assigned workers to each task
-fn _display_tasks(workers: Chores, chores: ChoresList) {
-    println!("{} is assigned to {}", workers.name, chores);
-}
-
-#[get("/")]
-#[instrument(name = "Index", level = "info", skip(conn))]
-pub async fn index(conn: Data<deadpool_redis::Pool>) -> HttpResponse {
-    info!("Rendering the index page");
-
-    // let preferred_names = preferred_names(name: ChoreAssignee);
-
-    // Get the Redis connection from the deadredis pool passed into the function
-    info!("Establishing the connection to Redis");
     let mut conn = match conn.get().await {
         Ok(conn) => conn,
         Err(err) => {
@@ -104,7 +20,6 @@ pub async fn index(conn: Data<deadpool_redis::Pool>) -> HttpResponse {
             return HttpResponse::InternalServerError().json("Error connecting to Redis");
         }
     };
-    info!("Redis connection established");
 
     let default_chores: Vec<Chores> = vec![
         Chores::new(ChoresList::KitchenAndGroceries, ChoreAssignee::Alual),
@@ -127,8 +42,6 @@ pub async fn index(conn: Data<deadpool_redis::Pool>) -> HttpResponse {
 
     let mut chores: Vec<Chores> = Vec::new();
 
-    // Check if the Redis key "chores_order" exists, if not set it to the current order of chores
-    debug!("Checking if Redis key 'chores_order' exists");
     'redis_tracking: {
         if let Ok(exists) = conn.exists::<&str, bool>("chores_order").await {
             debug!("Redis key 'chores_order' exists: {exists}");
@@ -161,10 +74,7 @@ pub async fn index(conn: Data<deadpool_redis::Pool>) -> HttpResponse {
                     .iter()
                     .map(|chore| chore.assigned_to.to_string())
                     .collect::<Vec<String>>()
-                    == name_order
-                        .into_iter()
-                        .map(|name| name)
-                        .collect::<Vec<String>>()
+                    == name_order.into_iter().collect::<Vec<String>>()
                 {
                     info!("Chore order is the same as the default order, rotating the chore order for the next week");
                     chores = rotate_assigned_to(&chores);
@@ -217,18 +127,7 @@ pub async fn index(conn: Data<deadpool_redis::Pool>) -> HttpResponse {
         }
     }
 
-    debug!(
-        "Chore order in Redis: {:#?}",
-        chores
-            .iter()
-            .map(|chore| chore.assigned_to.to_string())
-            .collect::<Vec<String>>()
-    );
-
-    // let chores = rotate_tasks(&chores);
-
-    let template = Index {
-        title: "Chore Tracker".to_string(),
+    let template = RotateAssignee {
         chores: default_chores
             .iter()
             .map(|chore| chore.name.clone())
@@ -239,24 +138,13 @@ pub async fn index(conn: Data<deadpool_redis::Pool>) -> HttpResponse {
             .collect::<Vec<ChoreAssignee>>(),
     };
 
-    debug!("rendering the main page");
     let body = match template.render() {
         Ok(body) => body,
         Err(err) => {
-            error!("Error rendering template: {err:#?}");
+            info!("Error rendering template: {err:#?}");
             return HttpResponse::InternalServerError().finish();
         }
     };
 
-    HttpResponse::Ok()
-        .content_type("text/html")
-        .append_header(("Authorization", "Bearer token"))
-        .body(body)
-}
-
-#[must_use]
-pub fn rotate_assigned_to(chores: &[Chores]) -> Vec<Chores> {
-    let mut rotated_chores = chores.to_vec();
-    rotated_chores.rotate_right(1);
-    rotated_chores
+    HttpResponse::Ok().content_type("text/html").body(body)
 }

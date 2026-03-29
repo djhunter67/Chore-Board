@@ -8,14 +8,38 @@ use tracing::{error, info, instrument};
 
 use super::index::{ChoreAssignee, ChoresList};
 
-#[derive(Serialize, Deserialize)]
+#[derive(Serialize, Deserialize, Clone)]
 pub struct Chores {
     pub name: ChoresList,
     pub assigned_to: ChoreAssignee,
 }
 
+impl Iterator for Chores {
+    type Item = Vec<ChoreAssignee>;
+
+    fn next(&mut self) -> Option<Vec<ChoreAssignee>> {
+        let chorees = vec![
+            ChoreAssignee::Aleyet,
+            ChoreAssignee::Ajathyij,
+            ChoreAssignee::Abeyi,
+            ChoreAssignee::Achyi,
+            ChoreAssignee::Acobayi,
+            ChoreAssignee::Anwan,
+            ChoreAssignee::Alual,
+            ChoreAssignee::Aluel,
+            ChoreAssignee::Aping,
+            ChoreAssignee::Akol,
+            ChoreAssignee::Kaman,
+            ChoreAssignee::DeAnna,
+            ChoreAssignee::Christerpher,
+        ];
+
+        Some(chorees)
+    }
+}
+
 impl Chores {
-    pub fn new(name: ChoresList, assigned_to: ChoreAssignee) -> Self {
+    pub const fn new(name: ChoresList, assigned_to: ChoreAssignee) -> Self {
         Self { name, assigned_to }
     }
 
@@ -28,7 +52,8 @@ impl Chores {
 #[template(path = "index.html")]
 pub struct Index {
     pub title: String,
-    pub chores: Vec<Chores>,
+    pub chores: Vec<ChoresList>,
+    pub assignees: Vec<ChoreAssignee>,
 }
 
 #[derive(Template)]
@@ -41,24 +66,14 @@ pub struct ErrorPage<'a> {
 }
 
 #[derive(Template)]
-#[template(path = "email.html")]
-pub struct EmailPage {
-    pub title: String,
-    pub confirmation_link: String,
-    pub domain: String,
-    pub expiration_time: String,
-    pub exact_time: String,
-}
-
-#[derive(Template)]
-#[template(path = "school.html")]
-pub struct School<'a> {
-    pub title: &'a str,
-    pub name: &'a str,
+#[template(path = "rotate.html")]
+pub struct RotateAssignee {
+    pub chores: Vec<ChoresList>,
+    pub assignees: Vec<ChoreAssignee>,
 }
 
 #[get("/favicon")]
-#[instrument(name = "Favicon", level = "info", target = "kid_data")]
+#[instrument(name = "Favicon", level = "info", target = "chore_tracker")]
 async fn favicon() -> impl Responder {
     info!("Serving favicon");
     let file = include_str!("../../static/imgs/education.svg");
@@ -66,7 +81,7 @@ async fn favicon() -> impl Responder {
 }
 
 #[get("/stylesheet")]
-#[instrument(name = "Stylesheet", level = "info", target = "kid_data")]
+#[instrument(name = "Stylesheet", level = "info", target = "chore_tracker")]
 async fn stylesheet() -> impl Responder {
     info!("Serving stylesheet");
     let file = include_str!("../../static/css/style.css");
@@ -74,7 +89,7 @@ async fn stylesheet() -> impl Responder {
 }
 
 #[get("/style.css.map")]
-#[instrument(name = "Source map", level = "info", target = "kid_data")]
+#[instrument(name = "Source map", level = "info", target = "chore_tracker")]
 async fn source_map() -> impl Responder {
     info!("Serving source map");
     let file = include_str!("../../static/css/style.css.map");
@@ -84,7 +99,7 @@ async fn source_map() -> impl Responder {
 }
 
 #[get("/htmx")]
-#[instrument(name = "Htmx", level = "info", target = "kid_data")]
+#[instrument(name = "Htmx", level = "info", target = "chore_tracker")]
 async fn htmx() -> Result<NamedFile, actix_web::Error> {
     info!("Serving htmx.min.js");
     let path: PathBuf = ["static", "assets", "htmx", "htmx.min.js"].iter().collect();
@@ -98,7 +113,7 @@ async fn htmx() -> Result<NamedFile, actix_web::Error> {
 }
 
 #[get("/response-targets")]
-#[instrument(name = "Response targets", level = "info", target = "kid_data")]
+#[instrument(name = "Response targets", level = "info", target = "chore_tracker")]
 async fn response_targets() -> Result<NamedFile, actix_web::Error> {
     info!("Serving response-targets.js");
     let pash: PathBuf = ["static", "assets", "htmx", "response-targets.js"]
