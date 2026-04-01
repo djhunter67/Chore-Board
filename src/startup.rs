@@ -18,7 +18,6 @@ use crate::endpoints;
 use crate::endpoints::templates::{
     favicon, health_check, htmx, response_targets, source_map, stylesheet,
 };
-use crate::endpoints::user::{create_user, delete_user, get_user, update_user};
 use crate::settings::Settings;
 
 #[instrument(
@@ -99,14 +98,8 @@ fn run(
         service
             .service(endpoints::index::index)
             .service(endpoints::rotate::rotate)
-            .service(
-                scope("/v1")
-                    .service(create_user)
-                    .service(get_user)
-                    .service(update_user)
-                    .service(delete_user),
-            )
-            .service(health_check)
+            .service(endpoints::points::points)
+            .service(scope("/v1").service(health_check))
     })
     .keep_alive(KeepAlive::Os) // Keep the connection alive; OS handled
     .disable_signals() // Disable the signals to allow the OS to handle the signals
@@ -140,12 +133,10 @@ impl Application {
         db_pool: Option<rusqlite::Connection>,
     ) -> Result<Self, std::io::Error> {
         info!("Buidling the main application");
-        let connection_pool = if let Some(pool) = db_pool {
-            pool
-        } else {
+        let connection_pool = db_pool.unwrap_or_else(|| {
             warn!("No database connection pool provided, using default");
             rusqlite::Connection::open_in_memory().expect("Failed to create in-memory database")
-        };
+        });
 
         let address = format!(
             "{}:{}",

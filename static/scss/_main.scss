@@ -135,18 +135,41 @@
 	    }
 
 	    .chore_name {
+		display: flex;
+		flex-direction: row;
 		font-weight: bold;
 		font-size: clamp(16px, 2.8vw, 48px);
 		margin-bottom: 0.5rem;
-		color: #000;
+		color: contrast-color(hsl(40, 100%, 70%));
+
+		button {
+		    border-radius: 2rem;
+		    margin-left: 2rem;
+		    padding: 1rem;
+		    background-color: hsl(40, 100%, 70%);
+		    font-weight: bolder;
+		}
+		
 	    }
 
 	    .chore_assigned {
+		display: flex;
+		flex-direction: row;
 		font-style: italic;
 		font-weight: bold;
 		color: #555;
 		margin-top: 0.5rem;
 		font-size: clamp(2rem, 2vw, 16rem);
+
+		button {
+		    border: solid black 3px;
+		    border-radius: 2rem;
+		    background-color: coral;
+		    margin: 0 1rem;
+		    padding: 0 2rem;
+		    font-weight: bold;
+		    opacity: 100%;
+		}
 	    }
 	}
     }
@@ -154,19 +177,19 @@
     &__rotate {
 	background-color: #04AA6D;
 	color: white;
-	padding: 2rem 3rem;
-	margin: 5rem;
+	padding: 3rem 4rem;
+	margin: 3rem 5rem;
 	border: black 2px solid;
 	width: 75vw;
 	height: 4rem;
 	border-radius: 2rem;
 	transition: transform 0.6s ease-out;
+	font-size: 2rem;
+	text-align: center;
 
 	&:hover, &:focus {
-	    color: darken(coral, 30%);
 	    border-color: greenyellow;
 	    box-shadow: 0 10px 20px rgba(0, 0, 0, 0.2);
-	    // transform: translateY(-2rem);
 	    transform: rotateX(10deg) rotateY(-10deg);
 	}
 	&:after {

@@ -39,10 +39,12 @@ impl Iterator for Chores {
 }
 
 impl Chores {
+    #[must_use]
     pub const fn new(name: ChoresList, assigned_to: ChoreAssignee) -> Self {
         Self { name, assigned_to }
     }
 
+    #[must_use]
     pub fn to_display(self) -> String {
         format!("{} - {}", self.name, self.assigned_to)
     }
@@ -54,6 +56,7 @@ pub struct Index {
     pub title: String,
     pub chores: Vec<ChoresList>,
     pub assignees: Vec<ChoreAssignee>,
+    pub points: Vec<u8>,
 }
 
 #[derive(Template)]
@@ -70,6 +73,7 @@ pub struct ErrorPage<'a> {
 pub struct RotateAssignee {
     pub chores: Vec<ChoresList>,
     pub assignees: Vec<ChoreAssignee>,
+    pub points: Vec<u8>,
 }
 
 #[get("/favicon")]

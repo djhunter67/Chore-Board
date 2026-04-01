@@ -5,10 +5,17 @@
     <col style="width: 20%;">
     <col style="width: 30%;">
   </colgroup>
-  {% for (chore, assignee) in chores.iter().zip(assignees) %}
+  {% for ((chore, assignee), point) in chores.iter().zip(assignees).zip(points) %}
   <tr id="chore_table">
-    <td><p class="chore_name">{{ chore }}:</p></td>
-    <td><p class="chore_assigned">{{ assignee }}</p></td>
+    <td><p class="chore_name">{{ chore }}:
+	<button
+	  hx-get="/points"
+	  hx-swap="none"
+	  hx-target="none"
+	  >
+	  ADD 1 POINT
+    </button></p></td>
+    <td><p class="chore_assigned">{{ assignee }}<button disabled>{{ point }}</button></p></td>
   </tr>
   {% endfor %}
 </table>

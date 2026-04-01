@@ -31,21 +31,26 @@
 	<col style="width: 20%;">
 	<col style="width: 30%;">
       </colgroup>
-      {% for (chore, assignee) in chores.iter().zip(assignees) %}
+      {% for ((chore, assignee), point) in chores.iter().zip(assignees).zip(points) %}
       <tr id="chore_table">
-	<td><p class="chore_name">{{ chore }}:</p></td>
-	<td><p class="chore_assigned">{{ assignee }}</p></td>
+	<td><p class="chore_name">{{ chore }}:
+	    <button
+	      hx-get="/points"
+	      >
+	      ADD 1 POINT
+	</button></p></td>
+	<td><p class="chore_assigned">{{ assignee }}<button disabled>{{ point }}</button></p></td>
       </tr>
       {% endfor %}
     </table>
   </aside>
-  <button
-    id="chore_board__rotate"
-    hx-post="/rotate_choree"
-    hx-target="#chore_board__container__table"
-    hx-swap="outerHTML">
-    ROTATE CHOREE
-  </button>
 </section>
+<button
+  id="chore_board__rotate"
+  hx-post="/rotate_choree"
+  hx-target="#chore_board__container__table"
+  hx-swap="outerHTML">
+  ROTATE TASK
+</button>
 
 {% call super() %} {% endblock %}

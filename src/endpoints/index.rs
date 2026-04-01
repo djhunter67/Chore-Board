@@ -1,9 +1,8 @@
-use actix_web::{get, web::Data, HttpResponse};
+use actix_web::{get, HttpResponse};
 use askama::Template;
-use deadpool_redis::{self, redis::AsyncCommands};
 use serde::{Deserialize, Serialize};
 use std::fmt::Display;
-use tracing::{debug, error, info, instrument, warn};
+use tracing::{debug, error, info, instrument};
 
 use crate::endpoints::templates::{Chores, Index};
 
@@ -27,25 +26,25 @@ pub enum ChoreAssignee {
 impl Display for ChoreAssignee {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         let assignee = match self {
-            ChoreAssignee::Aleyet => "Sudania",
-            ChoreAssignee::Ajathyij => "Sonara",
-            ChoreAssignee::Abeyi => "Sahara",
-            ChoreAssignee::Achyi => "Samira",
-            ChoreAssignee::Acobayi => "Safara",
-            ChoreAssignee::Anwan => "Semian",
-            ChoreAssignee::Alual => "Somara",
-            ChoreAssignee::Aluel => "Samaia",
-            ChoreAssignee::Aping => "Simidale",
-            ChoreAssignee::Akol => "Sakeem",
-            ChoreAssignee::Kaman => "Baba",
-            ChoreAssignee::DeAnna => "Yuma",
-            ChoreAssignee::Christerpher => "Sayfon",
+            Self::Aleyet => "Sudania",
+            Self::Ajathyij => "Sonara",
+            Self::Abeyi => "Sahara",
+            Self::Achyi => "Samira",
+            Self::Acobayi => "Safara",
+            Self::Anwan => "Semian",
+            Self::Alual => "Somara",
+            Self::Aluel => "Samaia",
+            Self::Aping => "Simidale",
+            Self::Akol => "Sakeem",
+            Self::Kaman => "Baba",
+            Self::DeAnna => "Yuma",
+            Self::Christerpher => "Sayfon",
         };
         write!(f, "{assignee}")
     }
 }
 
-#[derive(Serialize, Deserialize, Clone)]
+#[derive(Serialize, Deserialize, Clone, Copy)]
 pub enum ChoresList {
     KitchenAndGroceries,
     BreakfastAndBathroom,
@@ -84,26 +83,18 @@ impl Display for ChoresList {
 }
 
 /// Display the tasks and assigned workers to each task
-fn _display_tasks(workers: Chores, chores: ChoresList) {
+fn _display_tasks(workers: &Chores, chores: ChoresList) {
     println!("{} is assigned to {}", workers.name, chores);
 }
 
 #[get("/")]
-#[instrument(name = "Index", level = "info", skip(conn))]
-pub async fn index(conn: Data<deadpool_redis::Pool>) -> HttpResponse {
+#[instrument(name = "Index", level = "info")]
+pub async fn index() -> HttpResponse {
     info!("Rendering the index page");
-
-    // let preferred_names = preferred_names(name: ChoreAssignee);
 
     // Get the Redis connection from the deadredis pool passed into the function
     info!("Establishing the connection to Redis");
-    let mut conn = match conn.get().await {
-        Ok(conn) => conn,
-        Err(err) => {
-            error!("Error getting Redis connection: {err:#?}");
-            return HttpResponse::InternalServerError().json("Error connecting to Redis");
-        }
-    };
+
     info!("Redis connection established");
 
     let default_chores: Vec<Chores> = vec![
@@ -125,118 +116,17 @@ pub async fn index(conn: Data<deadpool_redis::Pool>) -> HttpResponse {
         Chores::new(ChoresList::VehicleRepair, ChoreAssignee::Kaman),
     ];
 
-    let mut chores: Vec<Chores> = Vec::new();
-
-    // Check if the Redis key "chores_order" exists, if not set it to the current order of chores
-    debug!("Checking if Redis key 'chores_order' exists");
-    'redis_tracking: {
-        if let Ok(exists) = conn.exists::<&str, bool>("chores_order").await {
-            debug!("Redis key 'chores_order' exists: {exists}");
-            // Get the chore order
-            if exists {
-                debug!("Retrieving chore order from Redis");
-                let name_order: Vec<String> = match conn.lrange("chores_order", 0, -1).await {
-                    Ok(orders) => {
-                        debug!("Chore order retrieved from Redis: {orders:#?}");
-                        orders
-                    }
-                    Err(err) => {
-                        error!("Error retrieving chore order from Redis: {err:#?}");
-                        return HttpResponse::InternalServerError()
-                            .json("Error retrieving chore order from Redis");
-                    }
-                };
-
-                // Fill in the chores vector with the chores in the order of the names retrieved from Redis, if the name matches the assigned_to field of the database values vector
-                chores.extend(name_order.clone().iter().filter_map(|name| {
-                    default_chores
-                        .iter()
-                        .find(|chore| chore.assigned_to.to_string() == *name)
-                        .cloned()
-                }));
-
-                info!("Chore order retrieved from Redis: {name_order:#?}");
-                // If the assigned_to of the chores vector is identical to the db chores assigned_to values, rotate the order of the chores for the next week
-                if chores
-                    .iter()
-                    .map(|chore| chore.assigned_to.to_string())
-                    .collect::<Vec<String>>()
-                    == name_order
-                        .into_iter()
-                        .map(|name| name)
-                        .collect::<Vec<String>>()
-                {
-                    info!("Chore order is the same as the default order, rotating the chore order for the next week");
-                    chores = rotate_assigned_to(&chores);
-                    debug!(
-                        "Rotated the chore order for the next week: {:#?}",
-                        chores
-                            .iter()
-                            .map(|chore| chore.assigned_to.to_string())
-                            .collect::<Vec<String>>()
-                    );
-
-                    // Save name order to the database
-                    conn.del("chores_order").await.unwrap_or_else(|err| {
-                        error!("Error deleting Redis key: {err:#?}");
-                    });
-                    conn.rpush(
-                        "chores_order",
-                        chores
-                            .iter()
-                            .map(|chore| chore.assigned_to.to_string())
-                            .collect::<Vec<String>>(),
-                    )
-                    .await
-                    .unwrap_or_else(|err| {
-                        error!("Error setting Redis key: {err:#?}");
-                    });
-                } else {
-                    warn!(
-                    "Chore order is different from the default order, not rotating the chore order"
-                );
-                }
-            } else {
-                error!("Redis key 'chores_order' does not exist, setting it to the default order of chores");
-                conn.rpush(
-                    "chores_order",
-                    default_chores
-                        .iter()
-                        .map(|chore| chore.assigned_to.to_string())
-                        .collect::<Vec<String>>(),
-                )
-                .await
-                .unwrap_or_else(|err| {
-                    error!("Error setting Redis key: {err:#?}");
-                });
-
-                chores = default_chores.clone();
-
-                break 'redis_tracking;
-            }
-        }
-    }
-
-    debug!(
-        "Chore order in Redis: {:#?}",
-        chores
-            .iter()
-            .map(|chore| chore.assigned_to.to_string())
-            .collect::<Vec<String>>()
-    );
-
-    // let chores = rotate_tasks(&chores);
-
     let template = Index {
         title: "Chore Tracker".to_string(),
         chores: default_chores
             .iter()
-            .map(|chore| chore.name.clone())
+            .map(|chore| chore.name)
             .collect::<Vec<ChoresList>>(),
-        assignees: chores
+        assignees: default_chores
             .iter()
             .map(|chore| chore.assigned_to.clone())
             .collect::<Vec<ChoreAssignee>>(),
+        points: [0; 20].to_vec(),
     };
 
     debug!("rendering the main page");
