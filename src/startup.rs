@@ -5,10 +5,10 @@ use actix_files::Files;
 use actix_web::dev;
 use actix_web::http::header;
 use actix_web::{
+    App, HttpServer,
     http::KeepAlive,
     middleware,
-    web::{scope, Data},
-    App, HttpServer,
+    web::{Data, scope},
 };
 use deadpool_redis::Pool;
 use tracing::instrument;
@@ -24,23 +24,16 @@ use crate::settings::Settings;
     name = "main runner",
     level = "info",
     target = "kid_data",
-    skip(listener, _db_pool, settings)
+    skip(listener, settings)
 )]
-fn run(
-    listener: std::net::TcpListener,
-    _db_pool: rusqlite::Connection,
-    settings: Settings,
-) -> Result<dev::Server, std::io::Error> {
+fn run(listener: std::net::TcpListener, settings: Settings) -> Result<dev::Server, std::io::Error> {
     // For each session
     let _secret_key = actix_web::cookie::Key::from(settings.secret.hmac_secret.as_bytes());
     info!("Obtaining the cookie secret");
 
-    // Connect to the MongoDB database
-    info!("Processed DB connection pool for distribution");
-
     // Redis connection pool
-    let cfg = deadpool_redis::Config::from_url(settings.clone().redis.url);
-    let redis_pool: Pool = match cfg.create_pool(Some(deadpool_redis::Runtime::Tokio1)) {
+    let red_cfg = deadpool_redis::Config::from_url(settings.clone().redis.url);
+    let redis_pool: Pool = match red_cfg.create_pool(Some(deadpool_redis::Runtime::Tokio1)) {
         Ok(pool) => pool,
         Err(err) => {
             error!("Failed to connect to Redis: {err}\nExiting...");
@@ -50,10 +43,11 @@ fn run(
             ));
         }
     };
+
     info!("Established secondary cache db connection pool");
 
-    let redis_pool = Data::new(redis_pool);
-    let setters = Data::new(settings);
+    let redis_pool: Data<Pool> = Data::new(redis_pool);
+    let setters: Data<Settings> = Data::new(settings);
 
     let _cors_middleware = Cors::default()
         .allowed_origin("http://localhost:8099")
@@ -126,17 +120,14 @@ impl Application {
         name = "Application builder",
         level = "info",
         target = "kid_data",
-        skip(settings, db_pool)
+        skip(settings)
     )]
-    pub async fn build(
-        settings: Settings,
-        db_pool: Option<rusqlite::Connection>,
-    ) -> Result<Self, std::io::Error> {
+    pub async fn build(settings: Settings) -> Result<Self, std::io::Error> {
         info!("Buidling the main application");
-        let connection_pool = db_pool.unwrap_or_else(|| {
-            warn!("No database connection pool provided, using default");
-            rusqlite::Connection::open_in_memory().expect("Failed to create in-memory database")
-        });
+        // let connection_pool = db_pool.unwrap_or_else(|| {
+        // warn!("No database connection pool provided, using default");
+        // rusqlite::Connection::open_in_memory().expect("Failed to create in-memory database")
+        // });
 
         let address = format!(
             "{}:{}",
@@ -146,7 +137,7 @@ impl Application {
         debug!("Binding the TCP port: {address}");
         let listener: net::TcpListener = net::TcpListener::bind(&address)?;
         let port = listener.local_addr()?.port();
-        let server = run(listener, connection_pool, settings)?;
+        let server = run(listener, settings)?;
 
         Ok(Self { port, server })
     }

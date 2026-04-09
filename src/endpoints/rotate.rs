@@ -1,166 +1,69 @@
-use actix_web::{post, web::Data, HttpResponse};
+use std::collections::HashMap;
+
+use actix_web::{HttpResponse, post, web::Data};
 use askama::Template;
-use deadpool_redis::{self, redis::AsyncCommands};
+use deadpool_redis::redis::AsyncCommands;
 use tracing::{debug, error, info, instrument, warn};
 
-use crate::endpoints::{
-    index::{rotate_assigned_to, ChoreAssignee, ChoresList},
-    templates::{Chores, RotateAssignee},
-};
+use crate::endpoints::templates::{ChoreAssignee, Chores, ChoresList, RotateAssignee};
 
 #[post("/rotate_choree")]
-#[instrument(name = "Rotate", level = "info", skip(conn))]
-pub async fn rotate(conn: Data<deadpool_redis::Pool>) -> HttpResponse {
+#[instrument(name = "Rotate", level = "info", skip(red_conn))]
+pub async fn rotate(red_conn: Data<deadpool_redis::Pool>) -> HttpResponse {
     info!("Rotating the assignees");
 
-    let mut conn = match conn.get().await {
-        Ok(conn) => conn,
+    let mut red_conn = match red_conn.get().await {
+        Ok(red_conn) => red_conn,
         Err(err) => {
-            error!("Error getting Redis connection: {err:#?}");
-            return HttpResponse::InternalServerError().json("Error connecting to Redis");
+            error!("Error getting Redis red_connection: {err:#?}");
+            return HttpResponse::InternalServerError().json("Error red_connecting to Redis");
         }
     };
 
-    let default_chores: Vec<Chores> = vec![
-        Chores::new(ChoresList::KitchenAndGroceries, ChoreAssignee::Alual),
-        Chores::new(ChoresList::BreakfastAndBathroom, ChoreAssignee::Akol),
-        Chores::new(ChoresList::VacuumAndDiningTable, ChoreAssignee::Anwan),
-        Chores::new(ChoresList::LunchAndGrassCutting, ChoreAssignee::Aleyet),
-        Chores::new(ChoresList::SinkCleanAndAnimalCare, ChoreAssignee::Achyi),
-        Chores::new(ChoresList::DinnerAndBottleCleaning, ChoreAssignee::Aluel),
-        Chores::new(ChoresList::ShoeCleanUp, ChoreAssignee::Aping),
-        Chores::new(ChoresList::TrashPickup, ChoreAssignee::Abeyi),
-        Chores::new(ChoresList::ClothesPickup, ChoreAssignee::Ajathyij),
-        Chores::new(ChoresList::ToyCleanUp, ChoreAssignee::Acobayi),
-        Chores::new(
-            ChoresList::TrashRemovalAndWaterAndMail,
-            ChoreAssignee::Christerpher,
-        ),
-        Chores::new(ChoresList::Dishes, ChoreAssignee::DeAnna),
-        Chores::new(ChoresList::VehicleRepair, ChoreAssignee::Kaman),
-    ];
+    let default_chores: Vec<Chores> = Chores::default_vec();
 
     let mut chores: Vec<Chores> = Vec::new();
-    let mut points: Vec<u8> = [0; 10].to_vec();
 
     'redis_tracking: {
-        if let Ok(exists) = conn.exists::<&str, bool>("chores_order").await && let Ok (exists_points) = conn.exists::<&str, bool>("points").await {
-            debug!("Redis key 'chores_order' and points exists: {exists} and {exists_points}");
+        if let Ok(exists) = red_conn.exists::<&str, bool>("chore_tracker").await {
+            debug!("Redis key 'chores_order' and points exists: {exists}");
             // Actions upon the existence of the keys in Redis
-            if exists && exists_points {
-                debug!("Retrieving chore order from Redis");
-                let name_order: Vec<String> = match conn.lrange("chores_order", 0, -1).await {
-                    Ok(orders) => {
-                        debug!("Chore order retrieved from Redis: {orders:#?}");
-                        orders
-                    }
-                    Err(err) => {
-                        error!("Error retrieving chore order from Redis: {err:#?}");
-                        return HttpResponse::InternalServerError()
-                            .json("Error retrieving chore order from Redis");
-                    }
-                };
+            if exists {
+                // get the chores order and points from Redis
 
-                points = match conn.lrange("points", 0, -1).await {
-                    Ok(points) => {
-                        warn!("Getting the points for each child");
-                        points
-                    }
-                    Err(err) => {
-                        error!("Points retrieval from Redis is invalid: {err:#?}");
-                        return HttpResponse::InternalServerError()
-                            .json("Error retrieving the Points from Redis");
-                    }
-                };
-
-		info!("Chore order retrieved from Redis: {name_order:#?}");
-                // Fill in the chores vector with the chores in the order of the names retrieved from Redis, if the name matches the assigned_to field of the database values vector
-                chores.extend(name_order.clone().iter().filter_map(|name| {
-                    default_chores
-                        .iter()
-                        .find(|chore| chore.assigned_to.to_string() == *name)
-                        .cloned()
-                }));
-                
-                // If the assigned_to of the chores vector is identical to the db chores assigned_to values, rotate the order of the chores for the next week
-                if chores
-                    .iter()
-                    .map(|chore| chore.assigned_to.to_string())
-                    .collect::<Vec<String>>()
-                    == name_order.into_iter().collect::<Vec<String>>()
-                {
-                    info!("Chore order is the same as the default order, rotating the chore order for the next week");
-                    let alt_chores = chores
-                        .iter()
-                        .map(|chore| Chores::new(chore.name, chore.assigned_to.clone()))
-                        .collect::<Vec<Chores>>();
-
-                    chores = rotate_assigned_to(&alt_chores);
-                    debug!(
-                        "Rotated the chore order for the next week: {:#?}",
-                        chores
-                            .iter()
-                            .map(|chore| chore.assigned_to.to_string())
-                            .collect::<Vec<String>>()
-                    );
-
-                    // Update the database in Redis with the new order of the chores, by deleting the existing key and setting it to the new order of the chores
-
-                    conn.del("chores_order").await.unwrap_or_else(|err| {
-                        error!("Error deleting Redis key: {err:#?}");
-                    });
-		    conn.del("points").await.unwrap_or_else(|err| {
-			error!("Error deleting the points key: {err:#?}");
-		    });
-
-                    conn.rpush(
-                        "chores_order",
-                        chores
-                            .iter()
-                            .map(|chore| chore.assigned_to.to_string())
-                            .collect::<Vec<String>>(),
-                    )
-                    .await
-                    .unwrap_or_else(|err| {
-                        error!("Error setting Redis key: {err:#?}");
-                    });
-
-		    conn.rpush(
-			"points",
-			points.iter().copied().filter(u8::is_ascii_digit).collect::<Vec<u8>>()
-		    ).await.unwrap_or_else(|err| {
-			error!("Error setting Redis key for the Assignee's points: {err:#?}");
-		    });
-
-
-                } else {
-                    warn!(
-                    "Chore order is different from the default order, not rotating the chore order"
-                );
-                }
+                chores = rotate_assignees(red_conn, chores, &default_chores).await;
             } else {
-                error!("Redis key 'chores_order' and 'points' does not exist, setting it to the default order of chores");
-                let zero_vec: Vec<u8> = vec![0; default_chores.len()];
-                // let request = VectorSetAddRequest::Member("points", zero_vector);
+                error!(
+                    "DB keys 'chores_order' and 'points' are not found, setting it to the default order of chores"
+                );
 
-                conn.rpush("points", zero_vec).await.unwrap_or_else(|err| {
-                    error!("Error setting Redis key for the Assignee's points: {err:#?}");
-                });
+                // Save the default values if no key is in the database
+                // let _: () = red_conn
+                //     .hset_multiple(
+                //         "assignee:points",
+                //         &default_chores
+                //             .iter()
+                //             .map(|chore| {
+                //                 (chore.assigned_to.0.clone().to_string(), chore.assigned_to.1)
+                //             })
+                //             .collect::<Vec<(String, u8)>>(),
+                //     )
+                //     .await
+                //     .expect("Unable to save the hset");
 
-                conn.rpush(
-                    "chores_order",
-                    default_chores
-                        .iter()
-                        .map(|chore| chore.assigned_to.to_string())
-                        .collect::<Vec<String>>(),
-                )
-                .await
-                .unwrap_or_else(|err| {
-                    error!("Error setting Redis key: {err:#?}");
-                });
+                for data in &default_chores {
+                    let _: () = red_conn
+                        .zadd(
+                            "chore_tracker",
+                            data.assigned_to.0.to_string(),
+                            data.assigned_to.1,
+                        )
+                        .await
+                        .expect("Failed to ZADD redis data");
+                }
 
+                // Use the default list if no list is found in the DB
                 chores = default_chores.clone();
-                points = vec![0; default_chores.len()];
 
                 break 'redis_tracking;
             }
@@ -174,9 +77,12 @@ pub async fn rotate(conn: Data<deadpool_redis::Pool>) -> HttpResponse {
             .collect::<Vec<ChoresList>>(),
         assignees: chores
             .iter()
-            .map(|chore| chore.assigned_to.clone())
+            .map(|chore| chore.assigned_to.0.clone())
             .collect::<Vec<ChoreAssignee>>(),
-        points,
+        points: chores
+            .iter()
+            .map(|chore| chore.assigned_to.1)
+            .collect::<Vec<u8>>(),
     };
 
     let body = match template.render() {
@@ -188,4 +94,125 @@ pub async fn rotate(conn: Data<deadpool_redis::Pool>) -> HttpResponse {
     };
 
     HttpResponse::Ok().content_type("text/html").body(body)
+}
+
+fn rotate_assigned_to(chores: &mut [Chores]) -> Vec<Chores> {
+    // let mut assignee_names: Vec<(ChoreAssignee, u8)> = chores
+    // .iter()
+    // .map(|chore| chore.assigned_to.clone())
+    // .collect();
+
+    // let mut rotated_names = chore_names;
+    // assignee_names.rotate_right(1);
+    chores.rotate_right(1);
+
+    // let _ = chores
+    //     .iter()
+    //     .enumerate()
+    //     .map(|(i, chore)| Chores {
+    //         name: chore.name,
+    //         assigned_to: assignee_names
+    //             .get(i)
+    //             .expect("Failed to query the vector index")
+    //             .clone(),
+    //     })
+    //     .collect::<Vec<Chores>>();
+
+    chores.to_vec()
+}
+
+async fn rotate_assignees(
+    mut red_conn: deadpool_redis::Connection,
+    mut chores: Vec<Chores>,
+    default_chores: &[Chores],
+) -> Vec<Chores> {
+    debug!("Retrieving chore order from Redis");
+
+    // let red_data: HashMap<String, u8> = red_conn
+    //     .hgetall("assignee:points")
+    //     .await
+    //     .expect("Failure to hgetall");
+
+    let red_data: Vec<(String, u8)> = red_conn
+        .zrange_withscores("chore_tracker", 0, -1)
+        .await
+        .expect("Failed to query redis data");
+
+    warn!("The HGETALL data: {red_data:#?}");
+
+    let (name_order, points): (Vec<String>, Vec<u8>) = red_data.into_iter().fold(
+        (Vec::new(), Vec::new()),
+        |(mut names, mut points), (name, point)| {
+            names.push(name);
+            points.push(point);
+            (names, points)
+        },
+    );
+
+    // At this point populate the 'chores' vec with the redis data
+    chores.extend(default_chores.iter().map(|chore| {
+        let index = name_order
+            .iter()
+            .position(|name| name == &chore.assigned_to.0.to_string())
+            .expect("Failed to find the index of the chore assignee in the name order vector");
+
+        Chores {
+            name: chore.name,
+            assigned_to: (
+                ChoreAssignee::from_string(
+                    &name_order
+                        .get(index)
+                        .expect("Failed to query the name order vector")
+                        .clone(),
+                )
+                .expect("Failed to convert the name string to a ChoreAssignee enum"),
+                *points
+                    .get(index)
+                    .expect("Failed to query the points vector"),
+            ),
+        }
+    }));
+
+    warn!(
+        "Chores before rotation: {:#?}",
+        chores
+            .iter()
+            .map(|chores| chores.assigned_to.0.to_string())
+            .collect::<Vec<String>>()
+    );
+    chores = rotate_assigned_to(&mut chores);
+    warn!(
+        "Rotated the chore order for the next week: {:#?}",
+        chores
+            .iter()
+            .map(|chore| chore.assigned_to.0.to_string())
+            .collect::<Vec<String>>()
+    );
+
+    // Save the new rotation in  redis
+    // let _: () = red_conn
+    //     .hset_multiple(
+    //         "assignee:points",
+    //         &name_order
+    //             .iter()
+    //             .zip(points.iter())
+    //             .map(|(name, point)| (name.clone(), *point))
+    //             .collect::<Vec<(String, u8)>>(),
+    //     )
+    //     .await
+    //     .expect("Unable to save the hset");
+    // let _: () = red_conn
+
+    for (i, data) in name_order.iter().enumerate() {
+        let _: () = red_conn
+            .zadd(
+                "chore_tracker",
+                data,
+                points.get(i).expect("no index at value"),
+            )
+            .await
+            .expect("Failed to ZADD redis data");
+    }
+
+    chores
 }

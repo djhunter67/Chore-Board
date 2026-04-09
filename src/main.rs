@@ -14,7 +14,7 @@ async fn main() -> io::Result<()> {
     telemetry::init_subscriber(subscriber);
 
     info!("Building the application");
-    let application = Application::build(settings, None).await?;
+    let application = Application::build(settings).await?;
 
     info!("Listening on port: {}", application.port());
     application.run_until_stopped().await?;
